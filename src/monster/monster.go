@@ -2,12 +2,12 @@ package monster
 
 import (
     sf "bitbucket.org/krepa098/gosfml2"
+    "math/rand"
+    "time"
     "../animation"
     wm "../worldmap"
-    "math/rand"
     "../renderer"
     "../config"
-    "time"
 )
 
 const RESOURCESDIR = "resources/"
