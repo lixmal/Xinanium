@@ -2,17 +2,22 @@ package monster
 
 import (
     sf "bitbucket.org/krepa098/gosfml2"
+    "github.com/stevedonovan/luar"
     "math/rand"
     "time"
+    "log"
     "../animation"
     wm "../worldmap"
     "../renderer"
     "../config"
+    "../event"
 )
 
 const RESOURCESDIR = "resources/"
-const MONSTERHEIGHT = 90
-const MONSTERWIDTH = 90
+//const MONSTERHEIGHT = 90
+//const MONSTERWIDTH =90
+const MONSTERHEIGHT = 32
+const MONSTERWIDTH = 31
 
 type Inventory struct {
 }
@@ -30,7 +35,7 @@ type Monster struct {
     animation.Animation
     Inventory *Inventory
     Speed uint16
-    JumpHeight byte
+    JumpHeight uint8
     Health int16
     Invincible bool
     Invisible bool
@@ -41,11 +46,14 @@ type Monster struct {
     dir *Dir
     ID int64
     entityType uint16
+    handler *luar.LuaObject
 }
+
+// monsterxy.type == mosnteremptystruct.type
 
 func New(montype string) *Monster {
     id := rand.Int63()
-    sprite := sf.NewSprite(config.Conf.Rm.Texture(config.SPRITEDIR + "monster.png"))
+    sprite := sf.NewSprite(config.Conf.Rm.Texture(config.SPRITEDIR + "player1.png"))
     monster := &Monster{
         Health: 100,
         ID: id,
@@ -57,15 +65,28 @@ func New(montype string) *Monster {
         entityType: config.LivingEntityMonster,
         Animation: animation.Animation{Sprite: sprite, Stopper: make(chan bool, 1)},
     }
-    config.TriggerEvent(&config.EventMonsterNew{Event: config.Event{EType: config.EventTypeMonsterNew}, Monster: monster })
 
-    sprite.SetTextureRect(sf.IntRect{0, 0, 90, 90});
-    monster.dir.y = -1
+    // trigger event and check if it was cancelled
+    if !event.Trigger(&event.MonsterNew{Event: event.New(event.TypeMonsterNew), Monster: monster }) {
+        sprite.SetTextureRect(sf.IntRect{0, 0, MONSTERWIDTH, MONSTERHEIGHT});
+        monster.dir.y = 1
 
+        config.Monsters[id] = monster
+        return monster
+    }
+    return nil
+}
 
-
-    config.Monsters[id] = monster
-    return monster
+func (m *Monster) Handler() *luar.LuaObject {
+    return m.handler
+}
+func (m *Monster) SetHandler(fn interface{}) bool {
+    if fn, ok := fn.(*luar.LuaObject); ok && fn.Type == "function" {
+        m.handler = fn
+        return true
+    }
+    log.Println("Failed to add handler to monster", m)
+    return false
 }
 
 func (m *Monster) GetSprite() *sf.Sprite {
@@ -86,35 +107,33 @@ func (m *Monster) Move(x, y float32) bool {
             m.SetDir(x, y)
         }
         if !m.Collides(newCoords.X, newCoords.Y) {
-            config.TriggerEvent(&config.EventMonsterMove{
-                Event: config.Event{EType: config.EventTypeMonsterMove},
+            if !event.Trigger(&event.MonsterMove{
+                Event: event.New(event.TypeMonsterMove),
                 Monster: m,
                 NewX: newCoords.X,
                 NewY: newCoords.Y,
-            })
+            }) {
+                // move the sprite
+                m.Sprite.Move(newCoords)
 
-            // move the sprite
-            m.Sprite.Move(newCoords)
+                // handle walk animation
+                m.FrameCounter++
+                if m.FrameCounter >= 3 {
+                //   m.NextFrame()
+                    m.FrameCounter = 0
+                }
 
-            // handle walk animation
-            m.FrameCounter++
-            if m.FrameCounter >= 3 {
-             //   m.NextFrame()
-                m.FrameCounter = 0
+                return true
             }
-
-            return true
         }
     }
     return false
 }
 
 func (m *Monster) Hurt(damage int16, damager config.LivingEntity) int16 {
-    e := &config.EventMonsterHurt{Event: config.Event{EType: config.EventTypeMonsterHurt}, Monster: m, Damage: damage, Damager: damager }
-    config.TriggerEvent(e)
-
-    if !m.Invincible {
-       /* buff, err := sf.NewSoundBufferFromFile("resources/sound/hit.ogg")
+    e := &event.MonsterHurt{Event: event.New(event.TypeMonsterHurt), Monster: m, Damage: damage, Damager: damager }
+    if !m.Invincible && !event.Trigger(e) {
+    /* buff, err := sf.NewSoundBufferFromFile("resources/sound/hit.ogg")
         sound := sf.NewSound(buff)
         if err != nil {
         }
@@ -128,30 +147,43 @@ func (m *Monster) Hurt(damage int16, damager config.LivingEntity) int16 {
         } else {
             m.Health = health
         }
+        m.Invincible = true
+        go func() {
+            time.Sleep(time.Second)
+            m.Invincible = false
+        }()
     }
     return m.Health
 }
 
-func (m *Monster) Kill(killer config.LivingEntity, hurtEvent *config.EventMonsterHurt) bool {
-    config.TriggerEvent(&config.EventMonsterKilled{Event: config.Event{EType: config.EventTypeMonsterKilled}, Monster: m, Killer: killer, HurtEvent: hurtEvent })
-    return true
+func (m *Monster) Kill(killer config.LivingEntity, hurtEvent *event.MonsterHurt) bool {
+    if !event.Trigger(&event.MonsterKilled{Event: event.New(event.TypeMonsterKilled), Monster: m, Killer: killer, HurtEvent: hurtEvent }) {
+        m.Dead = true
+        m.Remove()
+        // TODO Set dead animation/sprite
+        return true
+    }
+    return false
 }
 
 
 func (m *Monster) Remove() bool {
-    _, ok := config.Monsters[m.ID]
-    if !ok {
-        return false
+    if _, ok := config.Monsters[m.ID]; ok {
+        if !event.Trigger(&event.MonsterRemoved{Event: event.New(event.TypeMonsterRemoved), Monster: m }) {
+            // TODO: memory leak!?
+            delete(config.Monsters, m.ID)
+            return true
+        }
     }
-    config.TriggerEvent(&config.EventMonsterRemoved{Event: config.Event{EType: config.EventTypeMonsterRemoved}, Monster: m })
-    delete(config.Monsters, m.ID)
-    // TODO: memory leak!?
-    return true
+    return false
 }
 
-func (m *Monster) SetPosition(x, y float32) {
-    config.TriggerEvent(&config.EventMonsterChangedPosition{Event: config.Event{EType: config.EventTypeMonsterChangedPosition}, Monster: m, NewX: x, NewY: y })
-    m.Sprite.SetPosition(sf.Vector2f{x, y})
+func (m *Monster) SetPosition(x, y float32) bool {
+    if !event.Trigger(&event.MonsterChangedPosition{Event: event.New(event.TypeMonsterChangedPosition), Monster: m, NewX: x, NewY: y }) {
+        m.Sprite.SetPosition(sf.Vector2f{x, y})
+        return true
+    }
+    return false
 }
 
 func (m *Monster) Position() (float32, float32) {
@@ -159,55 +191,74 @@ func (m *Monster) Position() (float32, float32) {
     return pos.X, pos.Y
 }
 
+
+// add stop after removal
 func (m *Monster) Run() {
     go func() {
-        ticker := time.Tick(time.Second / 50)
-        for _ = range ticker {
-            if !m.Dead && config.Conf.GameActive {
-                if (rand.Intn(100) < 98) {
-                    m.Move(m.dir.x, m.dir.y)
-                } else {
-                    m.SetDir(float32(rand.Intn(3) - 1), float32(rand.Intn(3) - 1))
-                    if m.dir.x != 0 && m.dir.y != 0 {
+        ticker := time.Tick(time.Second / config.TICKS)
+        if m.handler == nil {
+            for _ = range ticker {
+                if m.Dead { return }
+                if config.Conf.GameActive {
+                    if (rand.Intn(100) < 98) {
                         m.Move(m.dir.x, m.dir.y)
+                    } else {
+                        m.SetDir(float32(rand.Intn(3) - 1), float32(rand.Intn(3) - 1))
+                        if m.dir.x != 0 && m.dir.y != 0 {
+                            m.Move(m.dir.x, m.dir.y)
+                        }
                     }
+                }
+            }
+        } else{
+            for _ = range ticker {
+                if m.Dead { return }
+                config.Lua.Lock()
+                _, err := m.handler.Call(m)
+                config.Lua.Unlock()
+                if err != nil {
+                    log.Println("error in function call in monster run of", m)
                 }
             }
         }
     }()
 }
 func (m *Monster) Talk(text string) bool {
-    config.TriggerEvent(&config.EventMonsterTalk{Event: config.Event{EType: config.EventTypeMonsterTalk}, Monster: m, Text: text })
-    return true
+    if !event.Trigger(&event.MonsterTalk{Event: event.New(event.TypeMonsterTalk), Monster: m, Text: text }) {
+        return true
+    }
+    return false
 }
 func (p *Monster) Dir() (float32, float32) {
     return p.dir.x, p.dir.y
 }
 
-func (m *Monster) SetDir(x, y float32) {
+func (m *Monster) SetDir(x, y float32) bool {
     rect := m.Sprite.GetTextureRect()
     if x == 1 {
-        rect.Top = 90 * 1
-        rect.Width = -90
-        rect.Left = 90
+        rect.Top =  MONSTERHEIGHT* 1
+        rect.Width = -MONSTERHEIGHT
+        rect.Left = MONSTERHEIGHT
     } else if x == -1 {
-        rect.Top = 90 * 1
-        rect.Width = 90
+        rect.Top = MONSTERHEIGHT * 3
+        rect.Width = MONSTERHEIGHT
         rect.Left = 0
     } else if y == 1 {
-        rect.Top = 90 * 2
-        rect.Width = 90
+        rect.Top = MONSTERHEIGHT * 2
+        rect.Width = MONSTERHEIGHT
         rect.Left = 0
     } else if y == -1 {
         rect.Top = 0
-        rect.Width = 90
+        rect.Width = MONSTERHEIGHT
         rect.Left = 0
     }
-    config.TriggerEvent(&config.EventMonsterChangedDirection{Event: config.Event{EType: config.EventTypeMonsterChangedDirection}, Monster: m, NewDirX: x, NewDirY: y})
-
-    m.Sprite.SetTextureRect(rect)
-    m.dir.x = x
-    m.dir.y = y
+    if !event.Trigger(&event.MonsterChangedDirection{Event: event.New(event.TypeMonsterChangedDirection), Monster: m, NewDirX: x, NewDirY: y}) {
+        m.Sprite.SetTextureRect(rect)
+        m.dir.x = x
+        m.dir.y = y
+        return true
+    }
+    return false
 }
 
 
