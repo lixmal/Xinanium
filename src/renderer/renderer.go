@@ -3,7 +3,7 @@ package renderer
 import (
     "time"
     sf "bitbucket.org/krepa098/gosfml2"
-    "fmt"
+//    "fmt"
     "../config"
 )
 
@@ -16,11 +16,13 @@ func Render(window *sf.RenderWindow, toDraw []sf.Drawer, text *sf.Text) {
     states := sf.RenderStatesDefault()
     //window.SetFramerateLimit(60)
     window.SetVSyncEnabled(true)
+    bgcolor := sf.ColorBlack()
 
     for start := time.Now(); window.IsOpen(); start = time.Now() {
-        window.Clear(sf.ColorBlack())
+        window.Clear(bgcolor) // check if needed
 
         for _, v := range toDraw {
+            //channel or lock
             window.Draw(v, states)
         }
 
@@ -31,7 +33,7 @@ func Render(window *sf.RenderWindow, toDraw []sf.Drawer, text *sf.Text) {
             window.Draw(entity.GetSprite(), states)
         }
 
-        text.SetString(fmt.Sprintf("%.0f fps", 1/ float64(Duration(time.Since(start)) / Duration(time.Second))))
+       // text.SetString(fmt.Sprintf("%.0f fps", 1/ float64(Duration(time.Since(start)) / Duration(time.Second))))
 
         window.Draw(text, states)
 /*        select {
