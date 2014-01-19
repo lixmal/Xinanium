@@ -4,7 +4,6 @@ import (
     "time"
     "sync"
     "github.com/aarzilli/golua/lua"
-    wm "../worldmap"
     rm "../resourcemanager"
 )
 
@@ -48,7 +47,6 @@ type Gameconfig struct {
     GameActive bool
     Scrolling bool
     Window *sf.RenderWindow
-    CurrentMap *wm.WorldMap
     TextMode bool
 }
 
@@ -61,6 +59,7 @@ var Conf = &Gameconfig{
         GameTitle:       GAMETITLE,
         Scrolling:       true,
 }
+
 var GameTicker = time.Tick(time.Second / TICKS)
 
 var Players = map[string]LivingEntity{}

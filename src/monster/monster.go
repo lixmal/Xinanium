@@ -131,7 +131,7 @@ func (m *Monster) Move(x, y float32) bool {
 }
 
 func (m *Monster) Hurt(damage int16, damager config.LivingEntity) int16 {
-    e := &event.MonsterHurt{Event: event.New(event.TypeMonsterHurt), Monster: m, Damage: damage, Damager: damager }
+    e := &event.MonsterHurt{ Event: event.New(event.TypeMonsterHurt), Monster: m, Damage: damage, Damager: damager }
     if !m.Invincible && !event.Trigger(e) {
     /* buff, err := sf.NewSoundBufferFromFile("resources/sound/hit.ogg")
         sound := sf.NewSound(buff)
@@ -223,12 +223,14 @@ func (m *Monster) Run() {
         }
     }()
 }
+
 func (m *Monster) Talk(text string) bool {
     if !event.Trigger(&event.MonsterTalk{Event: event.New(event.TypeMonsterTalk), Monster: m, Text: text }) {
         return true
     }
     return false
 }
+
 func (p *Monster) Dir() (float32, float32) {
     return p.dir.x, p.dir.y
 }
@@ -267,7 +269,7 @@ func (m *Monster) Collides(x, y float32) bool {
     bounds := m.Sprite.GetGlobalBounds()
     bounds.Left += x
     bounds.Top += y + MONSTERHEIGHT
-    worldmap := config.Conf.CurrentMap
+    worldmap := wm.Current
     if bounds.Left < 0 || bounds.Left + MONSTERWIDTH > float32(worldmap.Width * wm.TILEWIDTH) || bounds.Top - MONSTERFEET < 0 || bounds.Top > float32(worldmap.Height * wm.TILEHEIGHT) {
         return true
     }

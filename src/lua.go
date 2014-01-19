@@ -7,6 +7,7 @@ import (
     "./monster"
     "./player"
     "./event"
+    "./worldmap"
     "reflect"
     "github.com/aarzilli/golua/lua"
     "github.com/stevedonovan/luar"
@@ -33,6 +34,9 @@ func initLua(v **lua.State) {
         "Print":  fmt.Println,
         "config":  config.Conf,
         "Sleep": func(t uint16) { time.Sleep(time.Duration(t) * time.Second) },
+    })
+    luar.Register(*v, "", luar.Map{
+        "config.CurrentMap":  worldmap.Current,
     })
     luar.Register(*v, "event", luar.Map{
         "Trigger": func(fn interface{}) {
@@ -191,6 +195,7 @@ func initLua(v **lua.State) {
         "F15": sf.KeyF15,
         "Pause": sf.KeyPause,
     })
+    // deprecated, + use setfenv
     v.DoString(`
         os.execute   = nil
         os.exit      = nil

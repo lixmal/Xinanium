@@ -31,7 +31,7 @@ type Dir struct {
 type Player struct {
     Handle string
     Name string
-    Sprite *sf.Sprite
+    sprite *sf.Sprite
     animation.Animation
     Inventory *Inventory
     Item *Item
@@ -58,14 +58,14 @@ func New(name string, handle string, centric bool) *Player {
 		Speed: 1000,
 		Name: name,
 		Handle: handle,
-		Sprite: sprite,
+		sprite: sprite,
         entityType: config.LivingEntityPlayer,
         dir: &Dir{0, 1},
         centric: centric,
         Animation: animation.Animation{Sprite: sprite, Stopper: make(chan bool, 1)},
     }
     if !event.Trigger(&event.PlayerNew{Event: event.New(event.TypePlayerNew), Player: player }) {
-        player.Sprite.SetTextureRect(sf.IntRect{0, 0, PLAYERWIDTH, PLAYERHEIGHT})
+        player.sprite.SetTextureRect(sf.IntRect{0, 0, PLAYERWIDTH, PLAYERHEIGHT})
     //    for i, v := range []string{"N", "NW", "W", "SW", "S", "SE", "E", "NE"} {
         for i, v := range []string{"S", "W", "E", "N"} {
             player.AddAnimation(v, i * 58)
@@ -85,8 +85,9 @@ func (p *Player) Talk(text string) bool {
     }
     return false
 }
+
 func (p *Player) GetSprite() *sf.Sprite {
-    return p.Sprite
+    return p.sprite
 }
 
 func (p *Player) Type() uint16 {
@@ -115,7 +116,7 @@ func (p *Player) Move(x, y float32) bool {
             }) {
 
                 // move the sprite
-                p.Sprite.Move(newCoords)
+                p.sprite.Move(newCoords)
 
                 // handle walk animation
                 p.FrameCounter++
@@ -128,7 +129,7 @@ func (p *Player) Move(x, y float32) bool {
                 // scroll view
                 if config.Conf.Scrolling && p.centric {
                     view := config.Conf.Window.GetView()
-                    view.SetCenter(p.Sprite.GetPosition())
+                    view.SetCenter(p.sprite.GetPosition())
                     config.Conf.Window.SetView(view)
                 }
 
@@ -140,15 +141,13 @@ func (p *Player) Move(x, y float32) bool {
 }
 
 func (p *Player) Jump() bool {
-    if !p.InAir && p.JumpHeight > 0 && !p.Dead && !p.Floating {
-        if !event.Trigger(&event.PlayerJump{Event: event.New(event.TypePlayerJump), Player: p }) {
-            p.InAir = true
-            go func() {
-                println(p.Name, " is jumping")
-            }()
-            p.InAir = false
-            return true
-        }
+    if !p.InAir && p.JumpHeight > 0 && !p.Dead && !p.Floating && !event.Trigger(&event.PlayerJump{Event: event.New(event.TypePlayerJump), Player: p }) {
+        p.InAir = true
+        go func() {
+            println(p.Name, " is jumping")
+        }()
+        p.InAir = false
+        return true
     }
     return false
 }
@@ -161,7 +160,7 @@ func (p *Player) Hurt(damage int16, damager config.LivingEntity) int16 {
         if err != nil {
         }
         sound.Play()
-        */
+    */
         health := p.Health
         health -= damage
         if health <= 0 || p.Health < health {
@@ -200,14 +199,14 @@ func (p *Player) Remove() bool {
 
 func (p *Player) SetPosition(x, y float32) bool {
     if !event.Trigger(&event.PlayerChangedPosition{Event: event.New(event.TypePlayerChangedPosition), Player: p, NewX: x, NewY: y }) {
-        p.Sprite.SetPosition(sf.Vector2f{x, y})
+        p.sprite.SetPosition(sf.Vector2f{x, y})
         return true
     }
     return false
 }
 
 func (p *Player) Position() (float32, float32) {
-    pos := p.Sprite.GetPosition()
+    pos := p.sprite.GetPosition()
     return pos.X, pos.Y
 }
 
@@ -215,7 +214,7 @@ func (p *Player) Dir() (float32, float32) {
     return p.dir.x, p.dir.y
 }
 func (p *Player) SetDir(x, y float32) bool {
-    rect := p.Sprite.GetTextureRect()
+    rect := p.sprite.GetTextureRect()
 /*    if x == 1 && y == 1 {
         rect.Top = PLAYERHEIGHT * 5
     } else if x == -1 && y == 1 {
@@ -244,7 +243,7 @@ func (p *Player) SetDir(x, y float32) bool {
         rect.Top = PLAYERHEIGHT * 3
     }
     if !event.Trigger(&event.PlayerChangedDirection{Event: event.New(event.TypePlayerChangedDirection), Player: p, NewDirX: x, NewDirY: y}) {
-        p.Sprite.SetTextureRect(rect)
+        p.sprite.SetTextureRect(rect)
         p.dir.x = x
         p.dir.y = y
         return true
@@ -257,10 +256,10 @@ func (p *Player) SetDir(x, y float32) bool {
 const PLAYERFEET = PLAYERWIDTH
 func (p *Player) Collides(x,y float32) bool {
     println("player collides")
-    bounds := p.Sprite.GetGlobalBounds()
+    bounds := p.sprite.GetGlobalBounds()
     bounds.Left += x
     bounds.Top += y + PLAYERHEIGHT
-    worldmap := config.Conf.CurrentMap
+    worldmap := wm.Current
 
     var success bool
     var what config.LivingEntity

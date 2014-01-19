@@ -65,20 +65,20 @@ func main() {
 
 
     // read default worldmap and add to toDraw
-    worldmap := wm.Read(RESOURCESDIR + "maps/default.dat")
-    config.Conf.CurrentMap = worldmap
+    worldmap := wm.Read(RESOURCESDIR + "maps/gobmap.dat")
+    wm.Current = worldmap
     for x, v := range worldmap.Tiles {
         for y := range v {
             tileType := worldmap.Tiles[x][y]
             var sprite *sf.Sprite
             switch tileType {
-            case 1:
+            case 0:
                 sprite = sf.NewSprite(config.Conf.Rm.Texture(RESOURCESDIR + "textures/tiles/grass.png"))
-            case 2:
+            case 1:
                 sprite = sf.NewSprite(config.Conf.Rm.Texture(RESOURCESDIR + "textures/tiles/dirt.png"))
-            case 3:
+            case 2:
                 sprite = sf.NewSprite(config.Conf.Rm.Texture(RESOURCESDIR + "textures/tiles/water.png"))
-            case 4:
+            case 3:
                 sprite = sf.NewSprite(config.Conf.Rm.Texture(RESOURCESDIR + "textures/tiles/w_br.png"))
             }
             if sprite != nil {
@@ -113,13 +113,8 @@ func main() {
 
     config.Conf.GameActive = true
 
-    {
-        err := config.Lua.State.DoFile("test.lua")
-        if err != nil {
-            fmt.Println(err)
-        }
-    }
 
+    worldmap.RunScripts()
 
     var textEntered []rune
 
