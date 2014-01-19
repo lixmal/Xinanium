@@ -3,56 +3,84 @@ package worldmap
 import(
 //	sf "bitbucket.org/krepa098/gosfml2"
     "log"
+    "encoding/gob"
+    "os"
     "io/ioutil"
-    "encoding/binary"
+    "../config"
 )
 const TILEWIDTH = 40
 const TILEHEIGHT = 40
 const MAPHEADERSIZE = 1024
 const MAPTITLELENGTH = 256
 
-type Coord uint64
-
 type WorldMap struct {
     Tiles [][]byte
     Name string
-    Width Coord
-    Height Coord
-    ServerVersion uint32
+    Width float32
+    Height float32
+    Version float32
+    Script string
+    Objects []config.Entity
 }
 
-func Read(filename string) *WorldMap {
-    wmap := &WorldMap{}
-    file, err := ioutil.ReadFile(filename)
+func (w *WorldMap) RunScripts() bool {
+    state := config.Lua.State
+    /*state.LoadFile(w.Script)
+    state.NewTable
+    state.SetField(-1, )
+    // set env for map first; push env, inherit global env, set 'self, call
+    state.Setfenv*/
+    if state.DoString(w.Script) != nil {
+        return false
+    }
+    return true
+}
 
-    if err != nil {
-        log.Fatal("Could not open map: ", filename,": ", err)
+func Write(filename string, width, height float32) *WorldMap {
+    file, err := os.Create(filename)
+    checkErr(err)
+    defer file.Close()
+
+    tiles := make([][]byte, int32(height))
+    for i := range tiles {
+        tiles[i] = make([]byte, int32(width))
+    }
+    encoder := gob.NewEncoder(file)
+    script, err := ioutil.ReadFile("test.lua")
+    checkErr(err)
+    wmap := &WorldMap{
+        Tiles: tiles,
+        Width: width,
+        Height: height,
+        Version: 0.1,
+        Script: string(script),
     }
 
-    wmap.Name = string(file[0:MAPTITLELENGTH])
-
-    height, bytes :=  binary.Uvarint(file[MAPTITLELENGTH:MAPTITLELENGTH+8])
-    checkBytes(bytes)
-    width, bytes  :=  binary.Uvarint(file[MAPTITLELENGTH+8:MAPTITLELENGTH+8*2])
-    checkBytes(bytes)
-    ver, bytes  :=  binary.Uvarint(file[MAPTITLELENGTH+8*2:MAPTITLELENGTH+8*3])
-    checkBytes(bytes)
-
-    wmap.Height = Coord(height)
-    wmap.Width = Coord(width)
-    wmap.ServerVersion = uint32(ver)
-    wmap.Tiles = make([][]byte, height)
-    file = file[MAPHEADERSIZE:]
-    var j Coord = 0
-    for i := Coord(0); i < wmap.Height * wmap.Width; i += wmap.Height {
-        wmap.Tiles[j] = file[i:i+wmap.Height]
-        j++
-    }
+    checkErr(encoder.Encode(wmap))
     return wmap
 }
 
-func checkBytes(bytes int){
-    if bytes < 8 {
-       // log.Fatal("Bytes read != 8: ", bytes)
+func Read(filename string) *WorldMap {
+    file, err := os.Open(filename)
+    checkErr(err)
+    defer file.Close()
+
+    decoder := gob.NewDecoder(file)
+    var wmap WorldMap
+    checkErr(decoder.Decode(&wmap))
+
+    return &wmap
+}
+
+func init() {
+  //  Write("resources/maps/gobmap.dat", 40, 40)
+}
+
+
+func checkErr(err error) {
+    if err != nil {
+        log.Fatal(err)
     }
 }
+
+var Current *WorldMap
