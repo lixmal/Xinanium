@@ -12,7 +12,9 @@ type Duration float64
 //var Elapsed =  make(chan Duration)
 var Elapsed Duration
 
-func Render(window *sf.RenderWindow, toDraw []sf.Drawer, text *sf.Text) {
+var ToDraw []sf.Drawer
+
+func Render(window *sf.RenderWindow, text *sf.Text) {
     states := sf.RenderStatesDefault()
     //window.SetFramerateLimit(60)
     window.SetVSyncEnabled(true)
@@ -21,7 +23,7 @@ func Render(window *sf.RenderWindow, toDraw []sf.Drawer, text *sf.Text) {
     for start := time.Now(); window.IsOpen(); start = time.Now() {
         window.Clear(bgcolor) // check if needed
 
-        for _, v := range toDraw {
+        for _, v := range ToDraw {
             //channel or lock
             window.Draw(v, states)
         }
