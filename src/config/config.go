@@ -9,6 +9,7 @@ import (
 
 const GAMETITLE = "Xinanium"
 const SPRITEDIR = "resources/textures/spritesheets/"
+const RESOURCESDIR = "resources/"
 const TICKS = 50
 
 // Entity Types
@@ -48,6 +49,7 @@ type Gameconfig struct {
     Scrolling bool
     Window *sf.RenderWindow
     TextMode bool
+    Connected bool
 }
 
 var Conf = &Gameconfig{

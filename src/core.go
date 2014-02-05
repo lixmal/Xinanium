@@ -9,20 +9,20 @@ import (
 	"runtime"
     "math"
     "fmt"
+    "time"
     "strconv"
     "./config"
     "./monster"
     "./player"
     "./renderer"
     "./event"
+    "./network"
     wm "./worldmap"
     _ "net/http/pprof"
     "net/http"
 )
 
-const RESOURCESDIR = "resources/"
-const SPRITEDIR = "resources/textures/spritesheets/"
-
+const NETWORKRETRYTIMEOUT = time.Second * 5
 
 type Duration float64
 
@@ -54,41 +54,19 @@ func getTileCoord(x, y config.Coord, h int8) (config.Coord, config.Coord) {
 
 func main() {
 
-    var toDraw []sf.Drawer
 	window := sf.NewRenderWindow(sf.VideoMode{config.Conf.ScreenWidth, config.Conf.ScreenHeight, config.Conf.BitDepth}, config.Conf.GameTitle, sf.StyleDefault, config.Conf.ContextSettings)
     config.Conf.Window = window
 
     // create view
     view := sf.NewViewFromRect(sf.FloatRect{0, 0, float32(config.Conf.ScreenWidth) * 0.7, float32(config.Conf.ScreenHeight) * 0.7})
 
-
-
+    for !network.Connect() {
+        time.Sleep(NETWORKRETRYTIMEOUT)
+    }
+    defer network.Disconnect()
 
     // read default worldmap and add to toDraw
-    worldmap := wm.Read(RESOURCESDIR + "maps/gobmap.dat")
-    wm.Current = worldmap
-    for x, v := range worldmap.Tiles {
-        for y := range v {
-            tileType := worldmap.Tiles[x][y]
-            var sprite *sf.Sprite
-            switch tileType {
-            case 0:
-                sprite = sf.NewSprite(config.Conf.Rm.Texture(RESOURCESDIR + "textures/tiles/grass.png"))
-            case 1:
-                sprite = sf.NewSprite(config.Conf.Rm.Texture(RESOURCESDIR + "textures/tiles/dirt.png"))
-            case 2:
-                sprite = sf.NewSprite(config.Conf.Rm.Texture(RESOURCESDIR + "textures/tiles/water.png"))
-            case 3:
-                sprite = sf.NewSprite(config.Conf.Rm.Texture(RESOURCESDIR + "textures/tiles/w_br.png"))
-            }
-            if sprite != nil {
-                sprite.SetPosition(sf.Vector2f{float32(x * wm.TILEWIDTH), float32(y * wm.TILEHEIGHT)})
-                toDraw = append(toDraw, sprite)
-            } else {
-                log.Fatal("Unknown tile type: " + fmt.Sprintf("%i", tileType))
-            }
-        }
-    }
+    worldmap := wm.ReadOpen(config.RESOURCESDIR + "maps/gobmap.dat")
 
     font, err := sf.NewFontFromFile("/usr/share/fonts/truetype/ubuntu-font-family/Ubuntu-B.ttf")
     if err != nil {
@@ -103,7 +81,7 @@ func main() {
     }
 
     // start rendering
-    go renderer.Render(window, toDraw, text)
+    go renderer.Render(window, text)
 
     // init Luap
     initLua(&config.Lua.State)
@@ -180,7 +158,7 @@ func main() {
 
         // sfml event loop
         for e := window.PollEvent(); e != nil; e = window.PollEvent() {
-            switch e.(type) {
+            switch eT := e.(type) {
             case sf.EventClosed:
                 window.Close()
             case sf.EventLostFocus:
@@ -190,7 +168,7 @@ func main() {
                 runtime.GC()
                 config.Conf.GameActive = true
             case sf.EventTextEntered:
-                char := e.(sf.EventTextEntered).Char
+                char := eT.Char
                 // trigger text entered in any case
                 ev := &event.CharPressed{Event: event.New(event.TypeCharPressed), Char: string(char)}
                 cancelled := event.Trigger(ev)
@@ -202,7 +180,7 @@ func main() {
                     text.SetString(string(textEntered))
                 }
             case sf.EventKeyPressed:
-                keyCode := e.(sf.EventKeyPressed).Code
+                keyCode := eT.Code
                 // TODO: add possibility to manually trigger keys
 
                 // TODO: check other cancelled if no short circuit

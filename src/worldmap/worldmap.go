@@ -1,12 +1,14 @@
 package worldmap
 
 import(
-//	sf "bitbucket.org/krepa098/gosfml2"
+	sf "bitbucket.org/krepa098/gosfml2"
     "log"
     "encoding/gob"
     "os"
     "io/ioutil"
+    "fmt"
     "../config"
+    "../renderer"
 )
 const TILEWIDTH = 40
 const TILEHEIGHT = 40
@@ -70,6 +72,38 @@ func Read(filename string) *WorldMap {
     checkErr(decoder.Decode(&wmap))
 
     return &wmap
+}
+
+func Open(worldmap *WorldMap) {
+    for x, v := range worldmap.Tiles {
+        for y := range v {
+            tileType := worldmap.Tiles[x][y]
+            var sprite *sf.Sprite
+            switch tileType {
+                case 0:
+                    sprite = sf.NewSprite(config.Conf.Rm.Texture(config.RESOURCESDIR + "textures/tiles/grass.png"))
+                case 1:
+                    sprite = sf.NewSprite(config.Conf.Rm.Texture(config.RESOURCESDIR + "textures/tiles/dirt.png"))
+                case 2:
+                    sprite = sf.NewSprite(config.Conf.Rm.Texture(config.RESOURCESDIR + "textures/tiles/water.png"))
+                case 3:
+                    sprite = sf.NewSprite(config.Conf.Rm.Texture(config.RESOURCESDIR + "textures/tiles/w_br.png"))
+            }
+            if sprite != nil {
+                sprite.SetPosition(sf.Vector2f{float32(x * TILEWIDTH), float32(y * TILEHEIGHT)})
+                renderer.ToDraw = append(renderer.ToDraw, sprite)
+            } else {
+                log.Fatal("Unknown tile type: " + fmt.Sprintf("%i", tileType))
+            }
+        }
+    }
+    Current = worldmap
+}
+
+func ReadOpen(filename string) *WorldMap {
+    worldmap := Read(filename)
+    Open(worldmap)
+    return worldmap
 }
 
 func init() {
