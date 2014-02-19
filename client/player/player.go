@@ -8,6 +8,7 @@ import (
     "../config"
     "../renderer"
     "../event"
+    "../network"
 )
 
 
@@ -101,6 +102,8 @@ func (p *Player) Move(x, y float32) bool {
 
     // make sure player can actually move
     if p.Speed > 0 && !p.Dead {
+        network.Send(uint64(0))
+        network.Send(config.Dir{x,y})
 
         // handle new direction
         if p.dir.x != x || p.dir.y != y {

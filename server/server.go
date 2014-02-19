@@ -9,11 +9,20 @@ import (
 )
 
 const (
-    PORT = 22342
-    LADDRESS = "0.0.0.0"
-    TIMEOUT = 60 * 1000
-
+    PORT      = 22342
+    LADDRESS  = "0.0.0.0"
+    TIMEOUT   = 60 * 1000
+    IDENTCODE = 0x58696E4C
 )
+
+const (
+    MOVE = iota
+)
+
+type code uint64
+type Dir struct {
+    X, Y float32
+}
 
 func main() {
     service := LADDRESS + ":" + strconv.FormatInt(PORT, 10)
@@ -23,28 +32,67 @@ func main() {
     listener, err := net.ListenTCP("tcp", tcpAddr)
     checkErr(err)
 
+    var connchans []chan code
     for {
         conn, err := listener.Accept()
         if err != nil {
             continue
         }
     //    conn.SetTimeout(TIMEOUT)
-        go handleClient(conn)
+        connchan := make(chan code, 2)
+        connchans = append(connchans, connchan)
+        log.Println("accepted incoming connection from", conn.RemoteAddr())
+        go handleClient(conn, connchan)
     }
 }
 
-func handleClient(conn net.Conn) {
+func handleClient(conn net.Conn, connchan chan code) {
     defer conn.Close()
     encoder := gob.NewEncoder(conn)
     decoder := gob.NewDecoder(conn)
-    var buf [512]byte
-    _ = buf
-    _ = encoder
-    _ = decoder
+
     // map player to connection
     for {
+        var ident uint32
 
+        //
+        err := decoder.Decode(&ident)
+        if err != nil {
+            log.Println(err)
+            return
+        }
+        if ident != IDENTCODE {
+            continue
+        }
+
+        var what code
+        err = decoder.Decode(&what)
+        if err != nil {
+            log.Println(err)
+            return
+        }
+        //
+        err = decoder.Decode(&ident)
+        if err != nil {
+            log.Println(err)
+            return
+        }
+        if ident != IDENTCODE {
+            continue
+        }
+
+        switch what {
+            case MOVE:
+                var dir Dir
+                err := decoder.Decode(&dir)
+                if err != nil {
+                    log.Println(err)
+                    return
+                }
+                log.Println(dir)
+        }
     }
+    _ = encoder
 /*    for {
         n, err := conn.Read(buf[0:])
         if err != nil {
