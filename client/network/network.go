@@ -4,16 +4,21 @@ import (
     "net"
     "log"
     "strconv"
-//    "encoding/gob"
+    "encoding/gob"
     "../config"
 )
 
 const (
     PORT = 22342
     HOST = "localhost"
+    IDENTCODE uint32 = 0x58696E4C
 )
 
+
+
 var Conn net.Conn
+var encoder *gob.Encoder
+var decoder *gob.Decoder
 
 func dial() (net.Conn, error) {
     service := HOST + ":" + strconv.FormatInt(PORT, 10)
@@ -39,6 +44,8 @@ func Connect() bool {
         return false
     }
     config.Conf.Connected = true
+    encoder = gob.NewEncoder(Conn)
+    decoder = gob.NewDecoder(Conn)
     log.Println("Connected to", Conn.RemoteAddr())
     return true
 }
@@ -51,12 +58,25 @@ func Disconnect() bool {
         }
         log.Println("Disconnected from", Conn.RemoteAddr())
         config.Conf.Connected = false
+        encoder = nil
+        decoder = nil
         Conn = nil
         return true
     }
     if config.Conf.Connected {
         config.Conf.Connected = false
+        encoder = nil
+        decoder = nil
     }
     log.Println("Failed to disconnect from server: not connected")
     return false
+}
+
+func Send(val interface{}) error {
+    err := encoder.Encode(IDENTCODE)
+    if err != nil {
+        return err
+    }
+    err = encoder.Encode(val)
+    return err
 }
