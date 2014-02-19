@@ -20,6 +20,10 @@ const (
 
 type Coord uint64
 
+type Dir struct {
+    X, Y float32
+}
+
 type Entity interface {
     Position() (float32, float32)
     SetPosition(x, y float32) bool

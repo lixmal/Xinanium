@@ -16,7 +16,6 @@ import (
     "./player"
     "./renderer"
     "./event"
-    "./network"
     wm "./worldmap"
     _ "net/http/pprof"
     "net/http"
