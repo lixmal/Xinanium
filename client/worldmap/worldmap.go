@@ -79,16 +79,18 @@ func Open(worldmap *WorldMap) {
         for y := range v {
             tileType := worldmap.Tiles[x][y]
             var sprite *sf.Sprite
+            var err error
             switch tileType {
                 case 0:
-                    sprite = sf.NewSprite(config.Conf.Rm.Texture(config.RESOURCESDIR + "textures/tiles/grass.png"))
+                    sprite, err = sf.NewSprite(config.Conf.Rm.Texture(config.RESOURCESDIR + "textures/tiles/grass.png"))
                 case 1:
-                    sprite = sf.NewSprite(config.Conf.Rm.Texture(config.RESOURCESDIR + "textures/tiles/dirt.png"))
+                    sprite, err = sf.NewSprite(config.Conf.Rm.Texture(config.RESOURCESDIR + "textures/tiles/dirt.png"))
                 case 2:
-                    sprite = sf.NewSprite(config.Conf.Rm.Texture(config.RESOURCESDIR + "textures/tiles/water.png"))
+                    sprite, err = sf.NewSprite(config.Conf.Rm.Texture(config.RESOURCESDIR + "textures/tiles/water.png"))
                 case 3:
-                    sprite = sf.NewSprite(config.Conf.Rm.Texture(config.RESOURCESDIR + "textures/tiles/w_br.png"))
+                    sprite, err = sf.NewSprite(config.Conf.Rm.Texture(config.RESOURCESDIR + "textures/tiles/w_br.png"))
             }
+            _ = err
             if sprite != nil {
                 sprite.SetPosition(sf.Vector2f{float32(x * TILEWIDTH), float32(y * TILEHEIGHT)})
                 renderer.ToDraw = append(renderer.ToDraw, sprite)
