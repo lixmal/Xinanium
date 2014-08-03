@@ -2,20 +2,20 @@ package main
 
 import (
 	"./config"
-	"./event"
-	"./monster"
+//	"./event"
+//	"./monster"
 	"./network"
-	"./player"
-	"./renderer"
-	wm "./worldmap"
-	sf "bitbucket.org/krepa098/gosfml2"
+//	"./player"
+//	"./renderer"
+//	wm "./worldmap"
+    "github.com/veandco/go-sdl2/sdl"
 	"fmt"
 	"log"
 	"math"
-	"net/http"
-	_ "net/http/pprof"
+//	"net/http"
+//	_ "net/http/pprof"
 	"runtime"
-	"strconv"
+//	"strconv"
 )
 
 // TODO: Lock every sprite/window and then test!
@@ -26,9 +26,11 @@ func init() {
 	runtime.GOMAXPROCS(runtime.NumCPU() + 1)
 	runtime.LockOSThread()
 
+    /*
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
+    */
 
 }
 
@@ -46,14 +48,15 @@ func getTileCoord(x, y config.Coord, h int8) (config.Coord, config.Coord) {
 
 func main() {
 
-	window := sf.NewRenderWindow(sf.VideoMode{config.Conf.ScreenWidth, config.Conf.ScreenHeight, config.Conf.BitDepth}, config.Conf.GameTitle, sf.StyleDefault, config.Conf.ContextSettings)
+	window := sdl.CreateWindow(config.Conf.GameTitle, sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED, config.Conf.ScreenWidth, config.Conf.ScreenHeight, sdl.WINDOW_SHOWN)
 	config.Conf.Window = window
 
 	// create view
-	view := sf.NewViewFromRect(sf.FloatRect{0, 0, float32(config.Conf.ScreenWidth) * 0.7, float32(config.Conf.ScreenHeight) * 0.7})
+	//view := sf.NewViewFromRect(sf.FloatRect{0, 0, float32(config.Conf.ScreenWidth) * 0.7, float32(config.Conf.ScreenHeight) * 0.7})
 
 	network.Connect()
 	defer network.Disconnect()
+    defer window.Destroy()
 
 	if err := network.Send(config.PLAYER_LOGIN); err != nil {
 		log.Println(err)
@@ -66,7 +69,7 @@ func main() {
 	}
 
 	// get current map from server
-
+/*
 	// load fonts, move this to RM
 	font, err := sf.NewFontFromFile("/usr/share/fonts/truetype/ubuntu-font-family/Ubuntu-B.ttf")
 	if err != nil {
@@ -75,13 +78,13 @@ func main() {
 	text, err := sf.NewText(font)
 	text.SetCharacterSize(12)
 	_ = err
-
 	// set window to inactive for OpenGL
 	if !window.SetActive(false) {
 		log.Fatal("Could not set window OpenGL context to false")
 	}
 
-	var textEntered []rune
+*/
+	//var textEntered []rune
 
 	/*
 	   // music
@@ -93,6 +96,7 @@ func main() {
 	   music.Play()
 	*/
 
+    /*
 	// default Player
 	player1 := player.New("Player", "vik", true)
 	if player1 == nil {
@@ -112,16 +116,19 @@ func main() {
 		//mon := monster.New("monster", config.Coord(rand.Intn(1500)), config.Coord(rand.Intn(1500)), 500)
 		monster.New("monster").SetPosition(200, 200)
 	}
+    */
 
 	// start rendering at last
-	go renderer.Render(window, text)
+    renderer := sdl.CreateRenderer(window, -1, sdl.RENDERER_ACCELERATED)
+    defer renderer.Destroy()
+	//go renderer.Render(window)
 
 	config.Conf.GameActive = true
 
-	// game loop
-	for window.IsOpen() && config.Conf.Connected {
+    gameloop: for config.Conf.Connected {
 		<-config.GameTicker
 
+        /*
 		// player moving
 		if !config.Conf.TextMode && config.Conf.GameActive {
 			var x, y float32
@@ -144,12 +151,18 @@ func main() {
 				player1.Move(x, y)
 			}
 		}
+        */
 
-		// sfml event loop
-		for e := window.PollEvent(); e != nil; e = window.PollEvent() {
+		// sdl event loop
+		for e := sdl.PollEvent(); e != nil; e = sdl.PollEvent() {
 			switch eT := e.(type) {
-			case sf.EventClosed:
-				window.Close()
+			case *sdl.QuitEvent:
+                _ = eT
+                fmt.Println(123)
+                config.Conf.GameActive = false
+                // quit network
+                break gameloop
+            /*
 			case sf.EventLostFocus:
 				config.Conf.GameActive = false
 				runtime.GC()
@@ -225,7 +238,12 @@ func main() {
 				} else if keyCode == sf.KeyEscape {
 					config.Conf.GameActive = !config.Conf.GameActive && true
 				}
+            */
 			}
 		}
+
+        renderer.Clear()
+        renderer.SetDrawColor(255, 255, 255, 255)
+        renderer.Present()
 	}
 }

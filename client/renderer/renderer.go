@@ -2,9 +2,9 @@ package renderer
 
 import (
     "time"
-    sf "bitbucket.org/krepa098/gosfml2"
+    "github.com/veandco/go-sdl2/sdl"
 //    "fmt"
-    "../config"
+//    "../config"
 )
 
 type Duration float64
@@ -12,16 +12,16 @@ type Duration float64
 //var Elapsed =  make(chan Duration)
 var Elapsed Duration
 
-var ToDraw []sf.Drawer
+//var ToDraw []sf.Drawer
 
-func Render(window *sf.RenderWindow, text *sf.Text) {
-    states := sf.DefaultRenderStates()
-    //window.SetFramerateLimit(60)
-    window.SetVSyncEnabled(true)
-    bgcolor := sf.ColorBlack()
+func Render(window *sdl.Window) {
+    renderer := sdl.CreateRenderer(window, -1, sdl.RENDERER_ACCELERATED)
+    defer renderer.Destroy()
 
-    for start := time.Now(); window.IsOpen(); start = time.Now() {
-        window.Clear(bgcolor) // check if needed
+    for start := time.Now(); true; start = time.Now() {
+        renderer.Clear()
+        renderer.SetDrawColor(255, 255, 255, 255)
+        /*
         for _, v := range ToDraw {
             //channel or lock
             window.Draw(v, states)
@@ -32,10 +32,11 @@ func Render(window *sf.RenderWindow, text *sf.Text) {
         for _, entity := range config.Players {
             window.Draw(entity.GetSprite(), states)
         }
+        */
 
        // text.SetString(fmt.Sprintf("%.0f fps", 1/ float64(Duration(time.Since(start)) / Duration(time.Second))))
 
-        window.Draw(text, states)
+        //window.Draw(text, states)
         /*
         select {
             case Elapsed <- Duration(time.Since(start)) / Duration(time.Second):
@@ -43,7 +44,7 @@ func Render(window *sf.RenderWindow, text *sf.Text) {
         }
         */
 
-        window.Display()
+        renderer.Present()
         Elapsed = Duration(time.Since(start)) / Duration(time.Second)
     }
 }
