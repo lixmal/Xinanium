@@ -17,6 +17,13 @@ const (
     LivingEntityPlayer = iota
     LivingEntityMonster
 )
+// actions
+const (
+    PLAYER_MOVE uint64 = iota
+    GET_PLAYER
+    GET_PLAYER_TEX
+    PLAYER_LOGIN
+)
 
 type Coord uint64
 
@@ -58,7 +65,7 @@ type Gameconfig struct {
 
 var Conf = &Gameconfig{
         Rm: rm.New(),
-        ContextSettings: sf.ContextSettingsDefault(),
+        ContextSettings: sf.DefaultContextSettings(),
         ScreenWidth:     800,
         ScreenHeight:    600,
         BitDepth:        32,

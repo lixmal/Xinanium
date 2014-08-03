@@ -53,7 +53,7 @@ type Monster struct {
 
 func New(montype string) *Monster {
     id := rand.Int63()
-    sprite := sf.NewSprite(config.Conf.Rm.Texture(config.SPRITEDIR + "player1.png"))
+    sprite, err := sf.NewSprite(config.Conf.Rm.Texture(config.SPRITEDIR + "player1.png"))
     monster := &Monster{
         Health: 100,
         ID: id,
@@ -65,6 +65,7 @@ func New(montype string) *Monster {
         entityType: config.LivingEntityMonster,
         Animation: animation.Animation{Sprite: sprite, Stopper: make(chan bool, 1)},
     }
+    _ = err
 
     // trigger event and check if it was cancelled
     if !event.Trigger(&event.MonsterNew{Event: event.New(event.TypeMonsterNew), Monster: monster }) {
