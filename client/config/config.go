@@ -5,6 +5,7 @@ import (
     "sync"
     "github.com/aarzilli/golua/lua"
     rm "../resourcemanager"
+    "github.com/veandco/go-sdl2/sdl"
 )
 
 const GAMETITLE = "Xinanium"
@@ -52,13 +53,13 @@ type LivingEntity interface {
 type Gameconfig struct {
     Rm *rm.ResourceManager
     ContextSettings sf.ContextSettings
-    ScreenWidth uint
-    ScreenHeight uint
+    ScreenWidth int
+    ScreenHeight int
     BitDepth uint
     GameTitle string
     GameActive bool
     Scrolling bool
-    Window *sf.RenderWindow
+    Window *sdl.Window
     TextMode bool
     Connected bool
 }

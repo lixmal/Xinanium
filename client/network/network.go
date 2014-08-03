@@ -17,8 +17,6 @@ const (
     NETWORKRETRYTIMEOUT = time.Second * 5
 )
 
-
-
 var Conn net.Conn
 var encoder *gob.Encoder
 var decoder *gob.Decoder
