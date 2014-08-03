@@ -6,12 +6,15 @@ import (
     "strconv"
     "encoding/gob"
     "../config"
+    "errors"
+    "time"
 )
 
 const (
     PORT = 22342
     HOST = "localhost"
     IDENTCODE uint32 = 0x58696E4C
+    NETWORKRETRYTIMEOUT = time.Second * 5
 )
 
 
@@ -38,10 +41,9 @@ func dial() (net.Conn, error) {
 
 func Connect() bool {
     var err error
-    Conn, err = dial()
-    if err != nil {
+    for Conn, err = dial(); err != nil; {
         log.Println("Failed to connect to server:", err)
-        return false
+        time.Sleep(NETWORKRETRYTIMEOUT)
     }
     config.Conf.Connected = true
     encoder = gob.NewEncoder(Conn)
@@ -73,10 +75,49 @@ func Disconnect() bool {
 }
 
 func Send(val interface{}) error {
+    if !config.Conf.Connected {
+        return errors.New("Not connected to server")
+    }
     err := encoder.Encode(IDENTCODE)
     if err != nil {
+        log.Println(err)
+        Disconnect()
         return err
     }
     err = encoder.Encode(val)
-    return err
+    if err != nil {
+        log.Println(err)
+        Disconnect()
+        return err
+    }
+    return nil
+}
+
+
+func Read(value interface{}) error {
+    if !config.Conf.Connected {
+        return errors.New("Not connected to server")
+    }
+
+    var ident uint32
+
+    err := decoder.Decode(&ident)
+    if err != nil {
+        log.Println(err)
+        Disconnect()
+        return errors.New("value expected, received something else")
+    }
+    if ident != IDENTCODE {
+        Disconnect()
+        return errors.New("ident code expected, received something else")
+    }
+
+    err = decoder.Decode(value)
+    if err != nil {
+        log.Println(err)
+        Disconnect()
+        return errors.New("value expected, received something else")
+    }
+
+    return nil
 }
