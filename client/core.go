@@ -7,7 +7,7 @@ import (
 	"./network"
 	"./player"
 	"./renderer"
-	wm "./worldmap"
+//	wm "./worldmap"
 	sf "bitbucket.org/krepa098/gosfml2"
 	"fmt"
 	"log"
