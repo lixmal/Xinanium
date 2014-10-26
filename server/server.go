@@ -3,12 +3,15 @@ package main
 import (
 	"net"
 	//   "os"
-	wm "./worldmap"
+//	wm "./worldmap"
 	"encoding/gob"
+    "bytes"
+    "encoding/binary"
 	"io/ioutil"
 	"log"
-	"path/filepath"
-	"strconv"
+// 	"path/filepath"
+    "time"
+    "sync"
 )
 
 type Player struct {
@@ -29,11 +32,15 @@ type Player struct {
 	centric    bool
 }
 
+
 const (
-	PORT             = 22342
-	LADDRESS         = "0.0.0.0"
-	TIMEOUT          = 60 * 1000
-	IDENTCODE uint32 = 0x58696E4C
+	LISTEN_ADDRESS   = ""
+	PORT             = "22342"
+	TIMEOUT          = 10 * time.Second
+    PROTO_VERSION    = 1
+	IDENTCODE uint32 = 0x58696E << 8 | PROTO_VERSION
+    ERRTHRESHOLD     = 5
+    PACKET_MAXSIZE   = 512
 )
 
 // actions
@@ -42,158 +49,172 @@ const (
 	GET_PLAYER
 	GET_PLAYER_TEX
 	PLAYER_LOGIN
+    NO_PLAYER_TEX
 )
 
 const (
-	SPRITEDIR       = filepath.Dir(filepath.FromSlash("resources/textures/spritesheets")) + "/"
+	SPRITEDIR       = "resources/textures/spritesheets/"
+    // SPRITEDIR       = filepath.Dir(filepath.FromSlash("resources/textures/spritesheets")) + "/"
 	SPRITEEXTENSION = ".png"
 )
 
-type code uint64
 type Dir struct {
 	X, Y float32
 }
+type Conn struct {
+    net.PacketConn
+    net.Addr
+    // TODO: change to player object
+    handle string
+}
+
+var clients = make(map[net.Addr]chan []byte)
+var clientsMutex sync.RWMutex
+
 
 func main() {
-	service := LADDRESS + ":" + strconv.FormatInt(PORT, 10)
-	tcpAddr, err := net.ResolveTCPAddr("tcp", service)
-	checkErr(err)
+	service := LISTEN_ADDRESS + ":" + PORT
 
-	listener, err := net.ListenTCP("tcp", tcpAddr)
-	checkErr(err)
-	log.Println("server listening on port", PORT)
+	conn, err := net.ListenPacket("udp", service)
+	if err != nil {
+		log.Fatal(err)
+	}
+    defer conn.Close()
+	log.Println("Listening on", conn.LocalAddr())
 
-	worldmap := wm.ReadOpen("default")
+	//worldmap := wm.ReadOpen("default")
 
 	// init Luap
-	initLua(&config.Lua.State)
+	// initLua(&config.Lua.State)
 
 	// start event loop
-	initEventQueue()
+	// initEventQueue()
 
 	// run map scripts
-	worldmap.RunScripts()
+	// worldmap.RunScripts()
 
-	var connchans []chan code
+
+    // handle incoming packets
+    // either move to exisiting client goroutine
+    // or negotiate a new client
+    // TODO: put "timeout" somewhere in here
 	for {
-		conn, err := listener.Accept()
+        var buf [PACKET_MAXSIZE]byte
+        n, addr, err := conn.ReadFrom(buf[:])
 		if err != nil {
+            // TODO: add debug output and remove this
 			log.Println(err)
 			continue
 		}
-		//    conn.SetTimeout(TIMEOUT)
-		connchan := make(chan code, 2)
-		connchans = append(connchans, connchan)
-		log.Println("accepted incoming connection from", conn.RemoteAddr())
-		go handleClient(conn, connchan)
+        // minimum of identcode + action
+        if n < 4+2 {
+            continue
+        }
+        // 4 bytes from identcode
+        if binary.BigEndian.Uint32(buf[:4]) != IDENTCODE {
+            continue
+        }
+
+        clientsMutex.RLock()
+        clientchan, ok := clients[addr]
+        clientsMutex.RUnlock()
+        if ok {
+            clientchan<- buf[4:n]
+        } else {
+            log.Println("Accepted incoming connection from", addr)
+            go handleClient(&Conn{conn, addr, ""}, buf[4:n])
+        }
 	}
 }
 
-func handleClient(conn net.Conn, connchan chan code) {
-	defer conn.Close()
-	encoder := gob.NewEncoder(conn)
-	decoder := gob.NewDecoder(conn)
+func handleClient(conn *Conn, data []byte) {
 
-	// wait for player login cmd
-	var action code
-	if err := readConn(decoder, &action); err != nil {
-		disconnect(encoder, conn, err.Error())
-		return
-	}
+    action := binary.BigEndian.Uint16(data[:2])
+
 	if action != PLAYER_LOGIN {
-		disconnect(encoder, conn, "not logged in")
+        conn.disconnect("not logged in")
 		return
 	}
 
-	// read login name
-	var login string
-	if err := readConn(decoder, &login); err != nil {
-		disconnect(encoder, conn, err.Error())
-		return
-	}
+    // TODO: session handling in tcp, rest in udp
 
-	// read password
-	var pw string
-	if err := readConn(decoder, &pw); err != nil {
-		disconnect(encoder, conn, err.Error())
-		return
-	}
+    // Ignore non session initiating packets. Once session is established: send errors on unknown packets
 
-	// check login & pw
-	if login != "vik" || pw != "secret" {
-		log.Println("login by", login, " failed")
-		disconnect(encoder, conn, "wrong login")
-		return
-	}
-	log.Println("login by", login, "successful")
+    // TODO: decode login+pw from data at this point
+    {
+        login, pw := "vik", "secret"
 
-	// wait for player tex cmd
-	if err := readConn(decoder, &action); err != nil {
-		disconnect(encoder, conn, err.Error())
-		return
-	}
-	if action != GET_PLAYER_TEX {
-		disconnect(encoder, conn, "not logged in")
-		return
-	}
+        // TODO: read player from db
+        // check login & pw
+        if login != "vik" || pw != "secret" {
+            log.Println("Login by", login, "from", conn.Addr, "failed")
+            conn.disconnect("wrong login")
+            return
+        }
+        // TODO: sent OK response
+        conn.handle = login
+        log.Println("Login by", login, "from", conn.Addr, "successful")
+    }
+    data = nil
 
-	// TODO: read player from db
+    // authenticated: create chan and add to clients
+    connchan := make(chan []byte)
+    clientsMutex.Lock()
+    clients[conn.Addr] = connchan
+    clientsMutex.Unlock()
 
-	// read player texture from file
-	playertex, err := ioutil.ReadFile(SPRITEDIR + login + SPRITEEXTENSION)
-	if err != nil {
-		disconnect(encoder, conn, "failed to read player texture")
-		return
-	}
-	// send player texture to client
-	if err := sendConn(encoder, playertex); err != nil {
-		disconnect(encoder, conn, err.Error())
-		return
-	}
-	playertex = nil
 
-	// send current map
-	if err := sendConn(encoder, worldmap.Current); err != nil {
-		disconnect(encoder, conn, err.Error())
-		return
-	}
+    // errors don't break connection at once from this point
+    var errCnt uint8
+    for data = range connchan {
+        if errCnt > ERRTHRESHOLD {
+            conn.disconnect("too many errors")
+            return
+        }
 
-	// TODO: map player to connection
-	for {
-		if err := readConn(decoder, &action); err != nil {
-			disconnect(encoder, conn, err.Error())
-			return
-		}
+        // read action
+        action = binary.BigEndian.Uint16(data[:2])
+
+        d := gob.NewDecoder(bytes.NewBuffer(data))
 
 		switch action {
 		case PLAYER_MOVE:
 			var dir Dir
-			if err := readConn(decoder, &dir); err != nil {
-				disconnect(encoder, conn, err.Error())
-				return
-			}
+            if d.Decode(dir) != nil {
+               errCnt++
+               continue
+            }
 			log.Println(dir)
+        case GET_PLAYER_TEX:
+            // TODO: check here if in correct game phase
+            // TODO: sanitize player name for path or use ID from DB
+            // read player texture from file
+            playertex, err := ioutil.ReadFile(SPRITEDIR + conn.handle + SPRITEEXTENSION)
+            if err != nil {
+                // TODO: not sure what todo, maybe just ignore
+                conn.disconnect("failed to read player texture")
+                return
+            }
+            // send player texture to client
+            if err := conn.write(playertex); err != nil {
+                conn.disconnect("failed to send player texture")
+                return
+            }
+        // TODO: send current map
+        //if err := sendConn(encoder, worldmap.Current); err != nil {
+        //	disconnect(encoder, conn, err.Error())
+        //	return
+        default:
+            // unknown action
+            continue
 		}
+        // all went fine: remove err
+        errCnt = 0
 	}
-	/*    for {
-	          n, err := conn.Read(buf[0:])
-	          if err != nil {
-	              return
-	          }
-
-	          s := string(buf[0:n])
-	          // decode request
-	          if s[0:2] == CD {
-	              chdir(conn, s[3:])
-	          } else if s[0:3] == DIR {
-	              dirList(conn)
-	          } else if s[0:3] == PWD {
-	              pwd(conn)
-	          }
-	      }
-	*/
 }
 
+
+/*
 func readConn(decoder *gob.Decoder, value interface{}) error {
 	var ident uint32
 
@@ -215,40 +236,56 @@ func readConn(decoder *gob.Decoder, value interface{}) error {
 	return nil
 }
 
-func sendConn(encoder *gob.Encoder, value interface{}) error {
-	err := encoder.Encode(IDENTCODE)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-	err = encoder.Encode(value)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-
-	return nil
-}
-
-func disconnect(encoder *gob.Encoder, conn net.Conn, sendErr string) {
+func (c *Conn) read(value interface{}) bool {
 	var ident uint32
 
-	err := encoder.Encode(ident)
+    // TODO: send errors to client instead of false!?
+	err := c.decoder.Decode(&ident)
 	if err != nil {
 		log.Println(err)
-		return
+		return false
+	}
+	if ident != IDENTCODE {
+		return false
 	}
 
-	err = encoder.Encode(sendErr)
+	err = c.decoder.Decode(value)
 	if err != nil {
 		log.Println(err)
+		return false
 	}
-	// TODO: actually disconnect
-	log.Println("disconnected from", conn.RemoteAddr())
+
+	return true
+}
+*/
+
+func (c *Conn) write(value interface{}) error {
+    // TODO: check keepalive and disconnect if no _valid_ packets arrived
+    var buf0 [PACKET_MAXSIZE]byte
+    binary.BigEndian.PutUint32(buf0[:4], IDENTCODE)
+    buf := bytes.NewBuffer(buf0[4:])
+    e := gob.NewEncoder(buf)
+
+    if err := e.Encode(value); err != nil {
+        return err
+    }
+    if _, err := c.WriteTo(buf0[:], c.Addr); err != nil {
+        return err
+    }
+    return nil
 }
 
-func checkErr(err error) {
-	if err != nil {
-		log.Fatal(err)
-	}
+func (c *Conn) disconnect(err string) {
+    // TODO: write err to client
+
+    clientsMutex.Lock()
+    if clientchan, ok := clients[c.Addr]; ok {
+        close(clientchan)
+    }
+    delete(clients, c.Addr)
+    clientsMutex.Unlock()
+
+    // TODO: remove player/client mapping and resolve circle referencing
+    log.Println("Disconnected " + c.handle + " from " + c.Addr.String() + ": " + err)
 }
+

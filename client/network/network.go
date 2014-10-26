@@ -1,9 +1,9 @@
 package network
+// TODO: fix preamble stuck to each packet
 
 import (
     "net"
     "log"
-    "strconv"
     "encoding/gob"
     "../config"
     "errors"
@@ -11,9 +11,10 @@ import (
 )
 
 const (
-    PORT = 22342
+    PORT = "22342"
     HOST = "localhost"
-    IDENTCODE uint32 = 0x58696E4C
+    PROTO_VERSION    = 1
+    IDENTCODE uint32 = 0x58696E << 8 | PROTO_VERSION
     NETWORKRETRYTIMEOUT = time.Second * 5
 )
 
@@ -22,14 +23,9 @@ var encoder *gob.Encoder
 var decoder *gob.Decoder
 
 func dial() (net.Conn, error) {
-    service := HOST + ":" + strconv.FormatInt(PORT, 10)
+    udpAddr := HOST + ":" + PORT
 
-    tcpAddr, err := net.ResolveTCPAddr("tcp", service)
-    if err != nil {
-        return nil, err
-    }
-
-    conn, err := net.DialTCP("tcp", nil, tcpAddr)
+    conn, err := net.Dial("udp", udpAddr)
     if err != nil {
         return nil, err
     }

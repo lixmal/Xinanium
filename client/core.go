@@ -5,17 +5,20 @@ import (
 //	"./event"
 //	"./monster"
 	"./network"
-//	"./player"
+	"./player"
 //	"./renderer"
 //	wm "./worldmap"
-    "github.com/veandco/go-sdl2/sdl"
-	"fmt"
+    "image"
+	"azul3d.org/gfx/window.v2"
+	"azul3d.org/gfx.v1"
+	"azul3d.org/keyboard.v1"
+    "azul3d.org/lmath.v1"
+    "azul3d.org/tmx.dev"
 	"log"
 	"math"
 //	"net/http"
 //	_ "net/http/pprof"
 	"runtime"
-//	"strconv"
 )
 
 // TODO: Lock every sprite/window and then test!
@@ -24,14 +27,11 @@ type Duration float64
 
 func init() {
 	runtime.GOMAXPROCS(runtime.NumCPU() + 1)
-	runtime.LockOSThread()
-
     /*
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
     */
-
 }
 
 func i2c(x, y config.Coord) (config.Coord, config.Coord) {
@@ -46,17 +46,15 @@ func getTileCoord(x, y config.Coord, h int8) (config.Coord, config.Coord) {
 	return config.Coord(math.Floor(float64(x / config.Coord(h)))), config.Coord(math.Floor(float64(y / config.Coord(h)))) // height and width equal
 }
 
-func main() {
-
-	window := sdl.CreateWindow(config.Conf.GameTitle, sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED, config.Conf.ScreenWidth, config.Conf.ScreenHeight, sdl.WINDOW_SHOWN)
-	config.Conf.Window = window
+func gfxLoop(w window.Window, r gfx.Renderer) {
+	config.Conf.Window = w
+	config.Conf.Renderer = r
 
 	// create view
 	//view := sf.NewViewFromRect(sf.FloatRect{0, 0, float32(config.Conf.ScreenWidth) * 0.7, float32(config.Conf.ScreenHeight) * 0.7})
 
 	network.Connect()
 	defer network.Disconnect()
-    defer window.Destroy()
 
 	if err := network.Send(config.PLAYER_LOGIN); err != nil {
 		log.Println(err)
@@ -119,56 +117,53 @@ func main() {
     */
 
 	// start rendering at last
-    renderer := sdl.CreateRenderer(window, -1, sdl.RENDERER_ACCELERATED)
-    defer renderer.Destroy()
-	//go renderer.Render(window)
 
 	config.Conf.GameActive = true
 
-    gameloop: for config.Conf.Connected {
-		<-config.GameTicker
+    go func() {
 
-        /*
-		// player moving
-		if !config.Conf.TextMode && config.Conf.GameActive {
-			var x, y float32
-			var pressed bool
-			if sf.KeyboardIsKeyPressed(sf.KeyDown) {
-				y += 1
-				pressed = true
-			} else if sf.KeyboardIsKeyPressed(sf.KeyUp) {
-				y -= 1
-				pressed = true
-			}
-			if sf.KeyboardIsKeyPressed(sf.KeyRight) {
-				x += 1
-				pressed = true
-			} else if sf.KeyboardIsKeyPressed(sf.KeyLeft) {
-				pressed = true
-				x -= 1
-			}
-			if pressed {
-				player1.Move(x, y)
-			}
-		}
-        */
 
-		// sdl event loop
-		for e := sdl.PollEvent(); e != nil; e = sdl.PollEvent() {
-			switch eT := e.(type) {
-			case *sdl.QuitEvent:
-                _ = eT
-                fmt.Println(123)
-                config.Conf.GameActive = false
+		// Create an event mask for the events we are interested in.
+		evMask :=
+            window.KeyboardStateEvents |
+            window.CloseEvents         |
+            window.LostFocusEvents     |
+            window.GainedFocusEvents
+
+		// Create a channel of events.
+		events := make(chan window.Event, 256)
+
+		// Have the window notify our channel whenever events occur.
+		w.Notify(events, evMask)
+
+		// event loop
+		for e := range events {
+			switch e := e.(type) {
+			case keyboard.StateEvent:
+                if (e.State == keyboard.Down) {
+                    switch e.Key {
+                    case keyboard.Escape:
+                        config.Conf.GameActive = !config.Conf.GameActive && true
+                        runtime.GC()
+                    case keyboard.Y:
+                        config.Players["vik"].(*player.Player).Speed += 30
+                        log.Println(config.Players["vik"].(*player.Player).Speed)
+                    case keyboard.X:
+                        config.Players["vik"].(*player.Player).Speed -= 30
+                        log.Println(config.Players["vik"].(*player.Player).Speed)
+                    }
+                }
+            case window.Close:
                 // quit network
-                break gameloop
-            /*
-			case sf.EventLostFocus:
+                config.Conf.GameActive = false
+			case window.LostFocus:
 				config.Conf.GameActive = false
 				runtime.GC()
-			case sf.EventGainedFocus:
+			case window.GainedFocus:
 				runtime.GC()
 				config.Conf.GameActive = true
+            }
+            /*
 			case sf.EventTextEntered:
 				char := eT.Char
 				// trigger text entered in any case
@@ -239,11 +234,93 @@ func main() {
 					config.Conf.GameActive = !config.Conf.GameActive && true
 				}
             */
+		}
+    }()
+
+//    wm.ReadOpen("gobmap")
+    player1 := player.New("vik", "vik", true)
+    config.ToDraw = append(config.ToDraw, player1.GetSprite())
+    player1.GetSprite().SetPos(lmath.Vec3{float64(r.Bounds().Dx()) / 2.0, -1, float64(r.Bounds().Dy()) / 2.0})
+
+    camera := gfx.NewCamera()
+    camera.SetOrtho(r.Bounds(), 0.01, 1000)
+    camera.SetParent(player1.GetSprite().Transform)
+    camera.SetPos(lmath.Vec3{-(float64(r.Bounds().Dx()) / 2.0), -2, -(float64(r.Bounds().Dy()) / 2.0)})
+
+    //r.Clock().SetMaxFrameRate(config.TICKS);
+    r.Clock().SetMaxFrameRate(config.TICKS);
+
+
+    tmxMap, layers, err := tmx.LoadFile("resources/maps/default.tmx", nil)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    watcher := w.Keyboard()
+    for config.Conf.Connected {
+
+		// player moving
+		if !config.Conf.TextMode && config.Conf.GameActive {
+			var x, y float64
+			var pressed bool
+			if watcher.Down(keyboard.S) {
+				y -= 1
+				pressed = true
+			} else if watcher.Down(keyboard.W) {
+				y += 1
+				pressed = true
+			}
+			if watcher.Down(keyboard.D) {
+				x += 1
+				pressed = true
+			} else if watcher.Down(keyboard.A) {
+				pressed = true
+				x -= 1
+			}
+			if pressed {
+				player1.Move(x, y)
 			}
 		}
 
-        renderer.Clear()
-        renderer.SetDrawColor(255, 255, 255, 255)
-        renderer.Present()
+
+
+        //s := float64(r.Bounds().Dy()) / 2.0 // Card is two units wide, so divide by two.
+        //player1.GetSprite().SetScale(lmath.Vec3{s, s, s})
+        //player1.GetSprite().SetScale(lmath.Vec3{10, 1, 10})
+        //fmt.Println(player1.GetSprite().Scale())
+
+/*
+        spr := player1.GetSprite()
+        rot := spr.Rot()
+        spr.SetRot(lmath.Vec3{
+            X: rot.X,
+            Y: rot.Y,
+            Z: rot.Z + (15 * r.Clock().Dt()),
+        })
+*/
+        r.Clear(image.ZR, gfx.Color{0, 0, 0, 0})
+        r.ClearDepth(image.ZR, 1.0)
+
+        for _, v := range config.ToDraw {
+            r.Draw(image.ZR, v, camera)
+        }
+
+        for _, layer := range tmxMap.Layers {
+            objects, ok := layers[layer.Name]
+            if ok {
+                for _, obj := range objects {
+                    r.Draw(image.ZR, obj, camera)
+                }
+            }
+        }
+
+        r.Render()
 	}
+}
+
+func main() {
+    props := window.NewProps()
+    props.SetTitle(config.Conf.GameTitle + " - {FPS}")
+    props.SetSize(config.Conf.ScreenWidth, config.Conf.ScreenHeight)
+    window.Run(gfxLoop, props)
 }

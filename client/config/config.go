@@ -1,11 +1,10 @@
 package config
 import (
-    sf "bitbucket.org/krepa098/gosfml2"
     "time"
     "sync"
+	"azul3d.org/gfx/window.v2"
     "github.com/aarzilli/golua/lua"
-    rm "../resourcemanager"
-    "github.com/veandco/go-sdl2/sdl"
+	"azul3d.org/gfx.v1"
 )
 
 const GAMETITLE = "Xinanium"
@@ -26,47 +25,46 @@ const (
     PLAYER_LOGIN
 )
 
+var ToDraw []*gfx.Object
+
 type Coord uint64
 
 type Dir struct {
-    X, Y float32
+    X, Y float64
 }
 
 type Entity interface {
-    Position() (float32, float32)
-    SetPosition(x, y float32) bool
-    GetSprite() *sf.Sprite
+    Position() (float64, float64)
+    SetPosition(x, y float64) bool
     Type() uint16
     Remove() bool
+    GetSprite() *gfx.Object
 }
 
 type LivingEntity interface {
     Entity
-    Move(float32, float32) bool
-    Collides(float32, float32) bool
-    Dir() (float32, float32)
-    SetDir(float32, float32) bool
+    Move(float64, float64) bool
+    Collides(float64, float64) bool
+    Dir() (float64, float64)
+    SetDir(float64, float64) bool
     Talk(string) bool
     Hurt(int16, LivingEntity) int16
 }
 
 type Gameconfig struct {
-    Rm *rm.ResourceManager
-    ContextSettings sf.ContextSettings
     ScreenWidth int
     ScreenHeight int
     BitDepth uint
     GameTitle string
     GameActive bool
     Scrolling bool
-    Window *sdl.Window
+    Window window.Window
     TextMode bool
     Connected bool
+    Renderer gfx.Renderer
 }
 
 var Conf = &Gameconfig{
-        Rm: rm.New(),
-        ContextSettings: sf.DefaultContextSettings(),
         ScreenWidth:     800,
         ScreenHeight:    600,
         BitDepth:        32,

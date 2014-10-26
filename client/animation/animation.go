@@ -2,6 +2,7 @@ package animation
 
 import (
 	sf "bitbucket.org/krepa098/gosfml2"
+	"azul3d.org/gfx.v1"
     "time"
 )
 
@@ -11,7 +12,7 @@ const PLAYERHEIGHT = 32
 type Animation struct {
     anims map[string][]*sf.IntRect
     Stopper chan bool
-    Sprite *sf.Sprite
+    Sprite *gfx.Object
     FrameCounter uint8
 //    top int
 }
