@@ -1,51 +1,151 @@
 package resourcemanager
 
 import (
-	sf "bitbucket.org/krepa098/gosfml2"
+	"azul3d.org/gfx.v1"
 	"log"
+    "image"
+    _ "image/png"
+    "bytes"
+    "os"
 )
 
-type TextureStruct struct {
-	m map[string]*sf.Texture
+var SpriteShader *gfx.Shader
+
+var glslVert = []byte(`
+    #version 120
+    attribute vec3 Vertex;
+    attribute vec2 TexCoord0;
+    uniform mat4 MVP;
+    varying vec2 tc0;
+    void main()
+    {
+        tc0 = TexCoord0;
+        gl_Position = MVP * vec4(Vertex, 1.0);
+    }
+`)
+
+var glslFrag = []byte(`
+    #version 120
+    varying vec2 tc0;
+    uniform sampler2D Texture0;
+    uniform bool BinaryAlpha;
+    void main()
+    {
+        gl_FragColor = texture2D(Texture0, tc0);
+        if(BinaryAlpha && gl_FragColor.a < 0.5) {
+            discard;
+        }
+    }
+`)
+
+var textures = make(map[string]*gfx.Texture)
+
+func init() {
+    shader := gfx.NewShader("Sprite")
+    shader.GLSLVert = glslVert
+    shader.GLSLFrag = glslFrag
+    if shader == nil {
+        log.Fatal("Failed to load default shader")
+    }
+    SpriteShader = shader
 }
 
-/*
-type SpriteStruct struct {
-    m map[string]*sf.Sprite
-}
-*/
-type ResourceManager struct {
-	textures TextureStruct
-	//    sprites SpriteStruct
-}
-
-func New() *ResourceManager {
-	return &ResourceManager{
-		textures: TextureStruct{m: map[string]*sf.Texture{}},
-		//        sprites:  SpriteStruct{m: map[string]*sf.Sprite{}},
-	}
-}
-
-func (rm *ResourceManager) Texture(filename string) *sf.Texture {
-	tex, ok := rm.textures.m[filename]
+// load texture from memory, else read from disk and store
+func Texture(path string) *gfx.Texture {
+	tex, ok := textures[path]
 	if !ok {
-		var err error
-		tex, err = sf.NewTextureFromFile(filename, &sf.IntRect{})
-		if err != nil || tex == nil {
-			log.Fatal("Could not load image '", filename, "':", err)
-		}
-		rm.textures.m[filename] = tex
+        r, err := os.Open(path)
+        if err != nil {
+			log.Fatal("Could not load image '", path, "':", err)
+        }
+
+        img, _, err := image.Decode(r)
+        if err != nil {
+			log.Fatal("Could not load image '", path, "':", err)
+        }
+
+        tex = gfx.NewTexture()
+        tex.Source = img
+
+		textures[path] = tex
 	}
 
 	return tex
 }
 
-/*func (rm *ResourceManager) Sprite(filename string) *sf.Sprite {
-    spr, ok := rm.sprites.m[filename]
-    if !ok {
-        spr = sf.NewSprite(rm.Texture(filename))
-        rm.sprites.m[filename] = spr
-    }
-    return spr
+
+// from file
+func Sprite(path string, mesh []*gfx.Mesh) *gfx.Object {
+    return loadSprite(Texture(path), mesh)
 }
-*/
+
+// from memory, not sure if should cache in mem, rather on disk
+func SpriteFromMemory(mem *[]byte, mesh []*gfx.Mesh) *gfx.Object {
+    r := bytes.NewBuffer(*mem)
+    img, _, err := image.Decode(r)
+    if err != nil {
+        log.Fatal("Could not load image from memory: ", err)
+    }
+
+    tex := gfx.NewTexture()
+    tex.MinFilter = gfx.LinearMipmapLinear
+    tex.MagFilter = gfx.Linear
+    tex.Format = gfx.DXT1RGBA
+    tex.Source = img
+
+    return loadSprite(tex, mesh)
+}
+
+
+func loadSprite (tex *gfx.Texture, mesh []*gfx.Mesh) *gfx.Object {
+
+    sprite := gfx.NewObject()
+
+    sprite.Textures = []*gfx.Texture{tex}
+
+    //imgbnd := tex.Source.Bounds()
+    //aspect := float32(imgbnd.Dx()) / float32(imgbnd.Dy())
+    //var height float32 = 40.0
+    sprite.Shader = SpriteShader
+
+    sprite.AlphaMode = gfx.AlphaToCoverage
+
+    sprite.Meshes = mesh
+
+    return sprite
+}
+
+func TexCoords(u, v, s, t float32) []gfx.TexCoord {
+    return []gfx.TexCoord{
+        // Left triangle.
+        {u, v},
+        {u, t},
+        {s, t},
+        // Right triangle.
+        {u, v},
+        {s, t},
+        {s, v},
+    }
+}
+
+func Mesh (w, h, wPart, hPart float32) []*gfx.Mesh {
+    mesh := gfx.NewMesh()
+    mesh.Vertices = []gfx.Vec3{
+        // Left triangle.
+        {-w, 0, h}, // Left-Top
+        {-w, 0, -h}, // Left-Bottom
+        {w, 0, -h}, // Right-Bottom
+
+        // Right triangle.
+        {-w, 0, h}, // Left-Top
+        {w, 0, -h}, // Right-Bottom
+        {w, 0, h}, // Right-Top
+    }
+    mesh.TexCoords = []gfx.TexCoordSet{
+        {
+            Slice: TexCoords(0, 0, wPart, hPart),
+        },
+    }
+    return []*gfx.Mesh{mesh}
+}
+

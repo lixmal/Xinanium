@@ -1,19 +1,28 @@
 package worldmap
 
 import(
-	sf "bitbucket.org/krepa098/gosfml2"
     "log"
     "encoding/gob"
     "os"
     "io/ioutil"
     "fmt"
     "../config"
-    "../renderer"
+    rm "../resourcemanager"
+	"azul3d.org/gfx.v1"
+    "azul3d.org/lmath.v1"
+//    "../renderer"
 )
-const TILEWIDTH = 40
-const TILEHEIGHT = 40
-const MAPHEADERSIZE = 1024
+const TILEWIDTH      = 40
+const TILEHEIGHT     = 40
+const MAPHEADERSIZE  = 1024
 const MAPTITLELENGTH = 256
+const TILEDIR        = config.RESOURCESDIR + "textures/tiles/"
+const TILEEXTENSION  = ".png"
+const MAPDIR         = config.RESOURCESDIR + "maps/"
+const MAPEXTENSION   = ".dat"
+
+// one mesh for all maps
+var   mapMesh        = rm.Mesh(40, 40, 1.0, 1.0)
 
 type WorldMap struct {
     Tiles [][]byte
@@ -63,7 +72,7 @@ func Write(filename string, width, height float32) *WorldMap {
 }
 
 func Read(filename string) *WorldMap {
-    file, err := os.Open(filename)
+    file, err := os.Open(MAPDIR + filename + MAPEXTENSION)
     checkErr(err)
     defer file.Close()
 
@@ -75,30 +84,32 @@ func Read(filename string) *WorldMap {
 }
 
 func Open(worldmap *WorldMap) {
+    var cnt = 0
     for x, v := range worldmap.Tiles {
         for y := range v {
             tileType := worldmap.Tiles[x][y]
-            var sprite *sf.Sprite
-            var err error
+            var sprite *gfx.Object
+            var tileName string
             switch tileType {
                 case 0:
-                    sprite, err = sf.NewSprite(config.Conf.Rm.Texture(config.RESOURCESDIR + "textures/tiles/grass.png"))
+                    tileName = "grass"
                 case 1:
-                    sprite, err = sf.NewSprite(config.Conf.Rm.Texture(config.RESOURCESDIR + "textures/tiles/dirt.png"))
+                    tileName = "dirt"
                 case 2:
-                    sprite, err = sf.NewSprite(config.Conf.Rm.Texture(config.RESOURCESDIR + "textures/tiles/water.png"))
+                    tileName = "water"
                 case 3:
-                    sprite, err = sf.NewSprite(config.Conf.Rm.Texture(config.RESOURCESDIR + "textures/tiles/w_br.png"))
+                    tileName = "w_br"
+                default:
+                    log.Fatal("Unknown tile type: " + fmt.Sprintf("%i", tileType))
             }
-            _ = err
-            if sprite != nil {
-                sprite.SetPosition(sf.Vector2f{float32(x * TILEWIDTH), float32(y * TILEHEIGHT)})
-                renderer.ToDraw = append(renderer.ToDraw, sprite)
-            } else {
-                log.Fatal("Unknown tile type: " + fmt.Sprintf("%i", tileType))
-            }
+            sprite = rm.Sprite(TILEDIR + tileName + TILEEXTENSION, mapMesh)
+            // add to drawing
+            sprite.SetPos(lmath.Vec3{float64(x * TILEWIDTH), 0, float64(y * TILEHEIGHT)})
+            config.ToDraw = append(config.ToDraw, sprite)
+            cnt++
         }
     }
+    log.Println(cnt)
     Current = worldmap
 }
 

@@ -3,7 +3,6 @@ package worldmap
 import (
 	"../config"
 	"../renderer"
-	sf "bitbucket.org/krepa098/gosfml2"
 	"encoding/gob"
 	"fmt"
 	"io/ioutil"
