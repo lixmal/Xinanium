@@ -2,9 +2,9 @@ package config
 import (
     "time"
     "sync"
-	"azul3d.org/gfx/window.v2"
+    "azul3d.org/gfx/window.v2"
+    sf "bitbucket.org/krepa098/gosfml2"
     "github.com/aarzilli/golua/lua"
-	"azul3d.org/gfx.v1"
 )
 
 const GAMETITLE = "Xinanium"
@@ -25,33 +25,32 @@ const (
     PLAYER_LOGIN
 )
 
-var ToDraw []*gfx.Object
-
 type Coord uint64
 
 type Dir struct {
-    X, Y float64
+    X, Y float32
 }
 
 type Entity interface {
-    Position() (float64, float64)
-    SetPosition(x, y float64) bool
+    Position() (float32, float32)
+    SetPosition(x, y float32) bool
+//    GetSprite() *sf.Sprite
     Type() uint16
     Remove() bool
-    GetSprite() *gfx.Object
 }
 
 type LivingEntity interface {
     Entity
-    Move(float64, float64) bool
-    Collides(float64, float64) bool
-    Dir() (float64, float64)
-    SetDir(float64, float64) bool
+    Move(float32, float32) bool
+    Collides(float32, float32) bool
+    Dir() (float32, float32)
+    SetDir(float32, float32) bool
     Talk(string) bool
     Hurt(int16, LivingEntity) int16
 }
 
 type Gameconfig struct {
+    ContextSettings sf.ContextSettings
     ScreenWidth int
     ScreenHeight int
     BitDepth uint
@@ -61,10 +60,10 @@ type Gameconfig struct {
     Window window.Window
     TextMode bool
     Connected bool
-    Renderer gfx.Renderer
 }
 
 var Conf = &Gameconfig{
+        ContextSettings: sf.DefaultContextSettings(),
         ScreenWidth:     800,
         ScreenHeight:    600,
         BitDepth:        32,
