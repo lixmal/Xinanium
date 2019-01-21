@@ -5,6 +5,6 @@ package main
 import "C"
 
 func init() {
-	// X11 multithreading, linux/X11 only
-	C.XInitThreads()
+    // X11 multithreading, linux/X11 only
+    C.XInitThreads()
 }

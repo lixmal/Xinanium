@@ -1,8 +1,8 @@
 package animation
 
 import (
-	sf "bitbucket.org/krepa098/gosfml2"
-	"azul3d.org/gfx.v1"
+    sf "bitbucket.org/krepa098/gosfml2"
+    "azul3d.org/gfx.v1"
     "time"
 )
 

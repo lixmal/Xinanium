@@ -1,65 +1,68 @@
 package main
 
 import (
-	"net"
-	//   "os"
-//	wm "./worldmap"
-	"encoding/gob"
+    "net"
+//   "os"
+//    wm "./worldmap"
+    "encoding/gob"
     "bytes"
     "encoding/binary"
-	"io/ioutil"
-	"log"
-// 	"path/filepath"
+    "io/ioutil"
+    "log"
+//     "path/filepath"
     "time"
     "sync"
+    "crypto/subtle"
 )
 
 type Player struct {
-	Handle string
-	Name   string
-	// sprite missing here
-	Speed      uint16
-	JumpHeight uint8
-	Health     int16
-	Invincible bool
-	Invisible  bool
-	Walking    bool
-	InAir      bool
-	Dead       bool
-	Floating   bool
-	dir        *Dir
-	entityType uint16
-	centric    bool
+    Handle string
+    Name   string
+    // sprite missing here
+    Speed      uint16
+    JumpHeight uint8
+    Health     int16
+    Invincible bool
+    Invisible  bool
+    Walking    bool
+    InAir      bool
+    Dead       bool
+    Floating   bool
+    dir        *Dir
+    entityType uint16
+    centric    bool
 }
 
 
 const (
-	LISTEN_ADDRESS   = ""
-	PORT             = "22342"
-	TIMEOUT          = 10 * time.Second
+    LISTEN_ADDRESS   = ""
+    PORT             = "22342"
+    TIMEOUT          = 10 * time.Second
     PROTO_VERSION    = 1
-	IDENTCODE uint32 = 0x58696E << 8 | PROTO_VERSION
+    IDENTCODE uint32 = 0x58696E << 8 | PROTO_VERSION
     ERRTHRESHOLD     = 5
     PACKET_MAXSIZE   = 512
+    LOGIN_MAXLENGTH  = 200
 )
 
 // actions
 const (
-	PLAYER_MOVE = iota
-	GET_PLAYER
-	GET_PLAYER_TEX
-	PLAYER_LOGIN
+    PLAYER_MOVE = iota
+    GET_PLAYER
+    GET_PLAYER_TEX
+    PLAYER_LOGIN
     NO_PLAYER_TEX
+    LOGIN_OK
 )
 
 const (
-	SPRITEDIR       = "resources/textures/spritesheets/"
+    SPRITEDIR       = "resources/textures/spritesheets/"
     // SPRITEDIR       = filepath.Dir(filepath.FromSlash("resources/textures/spritesheets")) + "/"
-	SPRITEEXTENSION = ".png"
+    SPRITEEXTENSION = ".png"
 )
 
 type Dir struct {
-	X, Y float32
+    X, Y float32
 }
 type Conn struct {
     net.PacketConn
@@ -73,39 +76,37 @@ var clientsMutex sync.RWMutex
 
 
 func main() {
-	service := LISTEN_ADDRESS + ":" + PORT
+    service := LISTEN_ADDRESS + ":" + PORT
 
-	conn, err := net.ListenPacket("udp", service)
-	if err != nil {
-		log.Fatal(err)
-	}
+    conn, err := net.ListenPacket("udp", service)
+    if err != nil {
+        log.Fatal(err)
+    }
     defer conn.Close()
-	log.Println("Listening on", conn.LocalAddr())
+    log.Println("Listening on", conn.LocalAddr())
 
-	//worldmap := wm.ReadOpen("default")
+    //worldmap := wm.ReadOpen("default")
 
-	// init Luap
-	// initLua(&config.Lua.State)
+    // init Luap
+    // initLua(&config.Lua.State)
 
-	// start event loop
-	// initEventQueue()
+    // start event loop
+    // initEventQueue()
 
-	// run map scripts
-	// worldmap.RunScripts()
+    // run map scripts
+    // worldmap.RunScripts()
 
 
     // handle incoming packets
-    // either move to exisiting client goroutine
-    // or negotiate a new client
     // TODO: put "timeout" somewhere in here
-	for {
+    for {
         var buf [PACKET_MAXSIZE]byte
         n, addr, err := conn.ReadFrom(buf[:])
-		if err != nil {
+        if err != nil {
             // TODO: add debug output and remove this
-			log.Println(err)
-			continue
-		}
+            log.Println(err)
+            continue
+        }
         // minimum of identcode + action
         if n < 4+2 {
             continue
@@ -115,6 +116,8 @@ func main() {
             continue
         }
 
+        // either handle data to exisiting client goroutine
+        // or negotiate a new client
         clientsMutex.RLock()
         clientchan, ok := clients[addr]
         clientsMutex.RUnlock()
@@ -124,35 +127,38 @@ func main() {
             log.Println("Accepted incoming connection from", addr)
             go handleClient(&Conn{conn, addr, ""}, buf[4:n])
         }
-	}
+    }
 }
 
 func handleClient(conn *Conn, data []byte) {
 
     action := binary.BigEndian.Uint16(data[:2])
 
-	if action != PLAYER_LOGIN {
+    if action != PLAYER_LOGIN {
         conn.disconnect("not logged in")
-		return
-	}
+        return
+    }
 
     // TODO: session handling in tcp, rest in udp
 
     // Ignore non session initiating packets. Once session is established: send errors on unknown packets
 
-    // TODO: decode login+pw from data at this point
     {
-        login, pw := "vik", "secret"
+        login := data[2:LOGIN_MAXLENGTH+2]
+        pw    := data[LOGIN_MAXLENGTH+2:LOGIN_MAXLENGTH+2+128]
 
-        // TODO: read player from db
+        // TODO: read player from db and salt
         // check login & pw
-        if login != "vik" || pw != "secret" {
+        if subtle.ConstantTimeCompare(login, []byte("vik")) != 1 || subtle.ConstantTimeCompare(pw, []byte("secret")) != 1 {
             log.Println("Login by", login, "from", conn.Addr, "failed")
             conn.disconnect("wrong login")
             return
         }
         // TODO: sent OK response
-        conn.handle = login
+        buf := make([]byte, 2, 2)
+        binary.BigEndian.PutUint16(buf, LOGIN_OK)
+        conn.writeRaw(buf)
+        conn.handle = string(login)
         log.Println("Login by", login, "from", conn.Addr, "successful")
     }
     data = nil
@@ -177,14 +183,13 @@ func handleClient(conn *Conn, data []byte) {
 
         d := gob.NewDecoder(bytes.NewBuffer(data))
 
-		switch action {
-		case PLAYER_MOVE:
-			var dir Dir
+        switch action {
+        case PLAYER_MOVE:
+            var dir Dir
             if d.Decode(dir) != nil {
-               errCnt++
-               continue
+                goto err
             }
-			log.Println(dir)
+            log.Println(dir)
         case GET_PLAYER_TEX:
             // TODO: check here if in correct game phase
             // TODO: sanitize player name for path or use ID from DB
@@ -195,69 +200,26 @@ func handleClient(conn *Conn, data []byte) {
                 conn.disconnect("failed to read player texture")
                 return
             }
-            // send player texture to client
+            m/ send player texture to client
             if err := conn.write(playertex); err != nil {
                 conn.disconnect("failed to send player texture")
                 return
             }
         // TODO: send current map
         //if err := sendConn(encoder, worldmap.Current); err != nil {
-        //	disconnect(encoder, conn, err.Error())
-        //	return
+        //    disconnect(encoder, conn, err.Error())
+        //    return
         default:
-            // unknown action
-            continue
-		}
+            goto err
+        }
         // all went fine: remove err
         errCnt = 0
-	}
+        continue
+
+        err:
+           errCnt++
+    }
 }
-
-
-/*
-func readConn(decoder *gob.Decoder, value interface{}) error {
-	var ident uint32
-
-	err := decoder.Decode(&ident)
-	if err != nil {
-		log.Println(err)
-		return errors.New("value expected, received something else")
-	}
-	if ident != IDENTCODE {
-		return errors.New("ident code expected, received something else")
-	}
-
-	err = decoder.Decode(value)
-	if err != nil {
-		log.Println(err)
-		return errors.New("value expected, received something else")
-	}
-
-	return nil
-}
-
-func (c *Conn) read(value interface{}) bool {
-	var ident uint32
-
-    // TODO: send errors to client instead of false!?
-	err := c.decoder.Decode(&ident)
-	if err != nil {
-		log.Println(err)
-		return false
-	}
-	if ident != IDENTCODE {
-		return false
-	}
-
-	err = c.decoder.Decode(value)
-	if err != nil {
-		log.Println(err)
-		return false
-	}
-
-	return true
-}
-*/
 
 func (c *Conn) write(value interface{}) error {
     // TODO: check keepalive and disconnect if no _valid_ packets arrived
@@ -269,7 +231,22 @@ func (c *Conn) write(value interface{}) error {
     if err := e.Encode(value); err != nil {
         return err
     }
+    // TODO: find true length
     if _, err := c.WriteTo(buf0[:], c.Addr); err != nil {
+        return err
+    }
+    return nil
+}
+
+func (c *Conn) writeRaw(value []byte) error {
+    // TODO: check keepalive and disconnect if no _valid_ packets arrived
+    var buf0 [PACKET_MAXSIZE]byte
+    binary.BigEndian.PutUint32(buf0[:4], IDENTCODE)
+
+    // TODO: glue slices instead of copy
+    n := copy(buf0[4:], value)
+
+    if _, err := c.WriteTo(buf0[:n+4], c.Addr); err != nil {
         return err
     }
     return nil
@@ -285,7 +262,7 @@ func (c *Conn) disconnect(err string) {
     delete(clients, c.Addr)
     clientsMutex.Unlock()
 
-    // TODO: remove player/client mapping and resolve circle referencing
+    // TODO: remove player/client mapping and resolve circular referencing
     log.Println("Disconnected " + c.handle + " from " + c.Addr.String() + ": " + err)
 }
 

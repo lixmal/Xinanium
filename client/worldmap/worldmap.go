@@ -8,21 +8,13 @@ import(
     "fmt"
     "../config"
     rm "../resourcemanager"
-	"azul3d.org/gfx.v1"
-    "azul3d.org/lmath.v1"
+    "azul3d.org/gfx.v1"
 //    "../renderer"
 )
-const TILEWIDTH      = 40
-const TILEHEIGHT     = 40
-const MAPHEADERSIZE  = 1024
+const TILEWIDTH = 40
+const TILEHEIGHT = 40
+const MAPHEADERSIZE = 1024
 const MAPTITLELENGTH = 256
-const TILEDIR        = config.RESOURCESDIR + "textures/tiles/"
-const TILEEXTENSION  = ".png"
-const MAPDIR         = config.RESOURCESDIR + "maps/"
-const MAPEXTENSION   = ".dat"
-
-// one mesh for all maps
-var   mapMesh        = rm.Mesh(40, 40, 1.0, 1.0)
 
 type WorldMap struct {
     Tiles [][]byte
@@ -72,7 +64,7 @@ func Write(filename string, width, height float32) *WorldMap {
 }
 
 func Read(filename string) *WorldMap {
-    file, err := os.Open(MAPDIR + filename + MAPEXTENSION)
+    file, err := os.Open(filename)
     checkErr(err)
     defer file.Close()
 
@@ -84,32 +76,29 @@ func Read(filename string) *WorldMap {
 }
 
 func Open(worldmap *WorldMap) {
-    var cnt = 0
     for x, v := range worldmap.Tiles {
         for y := range v {
             tileType := worldmap.Tiles[x][y]
             var sprite *gfx.Object
-            var tileName string
             switch tileType {
                 case 0:
-                    tileName = "grass"
+                    sprite = rm.Sprite(config.RESOURCESDIR + "textures/tiles/grass.png")
                 case 1:
-                    tileName = "dirt"
+                    sprite = rm.Sprite(config.RESOURCESDIR + "textures/tiles/dirt.png")
                 case 2:
-                    tileName = "water"
+                    sprite = rm.Sprite(config.RESOURCESDIR + "textures/tiles/water.png")
                 case 3:
-                    tileName = "w_br"
-                default:
-                    log.Fatal("Unknown tile type: " + fmt.Sprintf("%i", tileType))
+                    sprite = rm.Sprite(config.RESOURCESDIR + "textures/tiles/w_br.png")
             }
-            sprite = rm.Sprite(TILEDIR + tileName + TILEEXTENSION, mapMesh)
-            // add to drawing
-            sprite.SetPos(lmath.Vec3{float64(x * TILEWIDTH), 0, float64(y * TILEHEIGHT)})
-            config.ToDraw = append(config.ToDraw, sprite)
-            cnt++
+            if sprite != nil {
+                // add to drawing
+            //    sprite.SetPosition(sf.Vector2f{float32(x * TILEWIDTH), float32(y * TILEHEIGHT)})
+            //    renderer.ToDraw = append(renderer.ToDraw, sprite)
+            } else {
+                log.Fatal("Unknown tile type: " + fmt.Sprintf("%i", tileType))
+            }
         }
     }
-    log.Println(cnt)
     Current = worldmap
 }
 
